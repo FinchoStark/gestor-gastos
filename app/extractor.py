@@ -1,9 +1,9 @@
 """
 Lectura de tickets con IA (Claude con visión).
 
-Se usa "tool use" forzado: en vez de pedirle al modelo que escriba JSON a mano,
-le damos una herramienta con un esquema JSON y le obligamos a llamarla.
-Así la respuesta siempre llega estructurada y con los campos que esperamos.
+Se usan salidas estructuradas (output_config.format): en vez de pedirle al modelo
+que escriba JSON a mano, le damos un esquema JSON y la API garantiza que la
+respuesta lo cumple. Así siempre llega con los campos que esperamos.
 
 Si no hay ANTHROPIC_API_KEY configurada, funciona en MODO DEMO devolviendo
 un ticket inventado, para poder probar la aplicación entera sin coste.
@@ -11,48 +11,50 @@ un ticket inventado, para poder probar la aplicación entera sin coste.
 from __future__ import annotations
 
 import base64
+import json
 import random
 from datetime import date, timedelta
 
 from . import config
 from .validacion import CATEGORIAS
 
-HERRAMIENTA = {
-    "name": "registrar_tickets",
-    "description": "Registra los datos de TODOS los tickets o facturas que aparecen en la imagen.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "tickets": {
-                "type": "array",
-                "description": "Un elemento por cada ticket distinto visible en la foto.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "comercio": {"type": "string", "description": "Nombre del establecimiento"},
-                        "cif": {"type": ["string", "null"], "description": "CIF/NIF del EMISOR del ticket"},
-                        "fecha": {"type": ["string", "null"], "description": "Fecha en formato YYYY-MM-DD"},
-                        "numero_ticket": {"type": ["string", "null"]},
-                        "base_imponible": {"type": ["number", "null"]},
-                        "tipo_iva": {"type": ["number", "null"], "description": "Porcentaje, ej. 10 o 21"},
-                        "cuota_iva": {"type": ["number", "null"]},
-                        "total": {"type": ["number", "null"]},
-                        "moneda": {"type": "string", "description": "Código ISO, ej. EUR"},
-                        "categoria": {"type": "string", "enum": sorted(CATEGORIAS)},
-                        "metodo_pago": {"type": ["string", "null"], "enum": ["tarjeta", "efectivo", "otro", None]},
-                        "es_factura_completa": {
-                            "type": "boolean",
-                            "description": "true solo si aparecen nombre y NIF del CLIENTE (factura completa); false si es un ticket o factura simplificada",
-                        },
-                        "confianza": {"type": "number", "description": "De 0 a 1, cuánta seguridad tienes en la lectura"},
-                        "notas": {"type": ["string", "null"], "description": "Cualquier cosa dudosa o ilegible"},
-                    },
-                    "required": ["comercio", "total", "fecha", "categoria", "confianza", "es_factura_completa"],
-                },
-            }
-        },
-        "required": ["tickets"],
+# Todos los campos son obligatorios: lo que no se lea debe llegar como null, no omitido.
+_CAMPOS_TICKET = {
+    "comercio": {"type": ["string", "null"], "description": "Nombre del establecimiento"},
+    "cif": {"type": ["string", "null"], "description": "CIF/NIF del EMISOR del ticket"},
+    "fecha": {"type": ["string", "null"], "description": "Fecha en formato YYYY-MM-DD"},
+    "numero_ticket": {"type": ["string", "null"]},
+    "base_imponible": {"type": ["number", "null"]},
+    "tipo_iva": {"type": ["number", "null"], "description": "Porcentaje, ej. 10 o 21"},
+    "cuota_iva": {"type": ["number", "null"]},
+    "total": {"type": ["number", "null"]},
+    "moneda": {"type": "string", "description": "Código ISO, ej. EUR"},
+    "categoria": {"type": "string", "enum": sorted(CATEGORIAS)},
+    "metodo_pago": {"anyOf": [{"type": "string", "enum": ["tarjeta", "efectivo", "otro"]}, {"type": "null"}]},
+    "es_factura_completa": {
+        "type": "boolean",
+        "description": "true solo si aparecen nombre y NIF del CLIENTE (factura completa); false si es un ticket o factura simplificada",
     },
+    "confianza": {"type": "number", "description": "De 0 a 1, cuánta seguridad tienes en la lectura"},
+    "notas": {"type": ["string", "null"], "description": "Cualquier cosa dudosa o ilegible"},
+}
+
+ESQUEMA = {
+    "type": "object",
+    "properties": {
+        "tickets": {
+            "type": "array",
+            "description": "Un elemento por cada ticket distinto visible en la foto.",
+            "items": {
+                "type": "object",
+                "properties": _CAMPOS_TICKET,
+                "required": list(_CAMPOS_TICKET),
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["tickets"],
+    "additionalProperties": False,
 }
 
 INSTRUCCIONES = """Eres un asistente de administración que lee tickets y facturas españolas.
@@ -78,11 +80,13 @@ def extraer_tickets(imagen: bytes, tipo_mime: str) -> list[dict]:
     import anthropic  # import aquí para que el modo demo no necesite la librería
 
     cliente = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    respuesta = cliente.messages.create(
+    respuesta = cliente.beta.messages.create(
         model=config.ANTHROPIC_MODEL,
-        max_tokens=4096,
-        tools=[HERRAMIENTA],
-        tool_choice={"type": "tool", "name": HERRAMIENTA["name"]},
+        max_tokens=16000,
+        output_config={"format": {"type": "json_schema", "schema": ESQUEMA}},
+        # Si el modelo rechaza la petición, la API la repite en otro modelo
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
         messages=[{
             "role": "user",
             "content": [
@@ -98,18 +102,19 @@ def extraer_tickets(imagen: bytes, tipo_mime: str) -> list[dict]:
             ],
         }],
     )
-    return parsear_respuesta(respuesta.content)
+    return parsear_respuesta(respuesta)
 
 
-def parsear_respuesta(bloques) -> list[dict]:
-    """Saca la lista de tickets del bloque tool_use de la respuesta."""
-    for bloque in bloques:
-        tipo = bloque.get("type") if isinstance(bloque, dict) else getattr(bloque, "type", None)
-        if tipo == "tool_use":
-            entrada = bloque.get("input") if isinstance(bloque, dict) else bloque.input
-            tickets = (entrada or {}).get("tickets") or []
-            return [t for t in tickets if isinstance(t, dict)]
-    return []
+def parsear_respuesta(respuesta) -> list[dict]:
+    """Saca la lista de tickets de la respuesta. Lanza ValueError si no es utilizable."""
+    if respuesta.stop_reason == "refusal":
+        raise ValueError("La IA ha rechazado leer esta foto.")
+    if respuesta.stop_reason == "max_tokens":
+        raise ValueError("La respuesta de la IA ha quedado cortada: prueba con menos tickets por foto.")
+    texto = next((b.text for b in respuesta.content if b.type == "text"), None)
+    if texto is None:
+        raise ValueError("La IA no ha devuelto ningún dato.")
+    return json.loads(texto)["tickets"]
 
 
 def _ticket_demo() -> dict:

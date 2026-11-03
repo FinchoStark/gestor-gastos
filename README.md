@@ -12,7 +12,7 @@ flowchart LR
     B --> C[FastAPI<br/>POST /api/tickets]
     C --> D{¿Foto ya subida?<br/>hash SHA-256}
     D -- sí --> X[Aviso de duplicado]
-    D -- no --> E[Claude visión<br/>tool use → JSON]
+    D -- no --> E[Claude visión<br/>JSON con esquema]
     E --> F[Validaciones<br/>IVA · CIF · política]
     F --> G[(PostgreSQL)]
     C --> H[(AWS S3<br/>fotos privadas)]
@@ -87,7 +87,7 @@ Todas las rutas y la web piden usuario y contraseña (HTTP Basic) si están defi
 app/
   main.py         rutas FastAPI y flujo de subida
   auth.py         comprobación del usuario y la contraseña (HTTP Basic)
-  extractor.py    llamada a Claude con visión (tool use = salida estructurada)
+  extractor.py    llamada a Claude con visión (salida estructurada)
   validacion.py   reglas de negocio puras (sin BD ni web → fáciles de testear)
   db.py           consultas SQL con psycopg 3
   almacen.py      fotos en S3 o en carpeta local
@@ -99,7 +99,7 @@ scripts/          utilidades de línea de comandos
 
 ## Decisiones técnicas
 
-- **Tool use forzado** en vez de pedir "devuélveme JSON": el modelo está obligado a rellenar un esquema, así que la respuesta siempre es estructurada.
+- **Salidas estructuradas** (`output_config.format`) en vez de pedir "devuélveme JSON": la API garantiza que la respuesta cumple el esquema.
 - **La IA propone, las reglas validan, la persona decide**: nada se aprueba automáticamente.
 - **`NUMERIC(10,2)` y `Decimal`** para el dinero, nunca `float`.
 - **Respuesta original de la IA en `JSONB`** (`datos_ia`) para auditoría.

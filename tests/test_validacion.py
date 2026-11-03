@@ -1,7 +1,10 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
-from app.extractor import _ticket_demo, parsear_respuesta
+import pytest
+
+from app.extractor import ESQUEMA, _ticket_demo, parsear_respuesta
 from app.validacion import a_decimal, campos_fuera_de_rango, es_nif_valido, validar_ticket
 
 HOY = date(2026, 11, 3)
@@ -111,16 +114,45 @@ def test_ticket_simplificado_avisa_del_iva():
 
 
 # ------------------------------------------------------------ extractor
-def test_parsear_respuesta_tool_use():
-    bloques = [
-        {"type": "text", "text": "..."},
-        {"type": "tool_use", "name": "registrar_tickets", "input": {"tickets": [ticket(), ticket(total=5)]}},
-    ]
-    assert len(parsear_respuesta(bloques)) == 2
+def respuesta_ia(*bloques, stop_reason="end_turn"):
+    return SimpleNamespace(stop_reason=stop_reason, content=list(bloques))
+
+
+def bloque_texto(texto):
+    return SimpleNamespace(type="text", text=texto)
+
+
+def test_parsear_respuesta_json():
+    tickets = parsear_respuesta(respuesta_ia(bloque_texto('{"tickets": [{"comercio": "A"}, {"comercio": "B"}]}')))
+    assert [t["comercio"] for t in tickets] == ["A", "B"]
+
+
+def test_parsear_respuesta_ignora_el_razonamiento():
+    razonamiento = SimpleNamespace(type="thinking", thinking="")
+    tickets = parsear_respuesta(respuesta_ia(razonamiento, bloque_texto('{"tickets": [{"comercio": "A"}]}')))
+    assert len(tickets) == 1
 
 
 def test_parsear_respuesta_sin_tickets():
-    assert parsear_respuesta([{"type": "text", "text": "nada"}]) == []
+    assert parsear_respuesta(respuesta_ia(bloque_texto('{"tickets": []}'))) == []
+
+
+@pytest.mark.parametrize("respuesta", [
+    respuesta_ia(stop_reason="refusal"),
+    respuesta_ia(bloque_texto('{"tickets": [{"com'), stop_reason="max_tokens"),
+    respuesta_ia(),
+])
+def test_parsear_respuesta_no_utilizable_da_error(respuesta):
+    with pytest.raises(ValueError):
+        parsear_respuesta(respuesta)
+
+
+def test_esquema_cumple_lo_que_exige_la_api():
+    """Cada objeto debe cerrar sus propiedades y marcarlas todas como obligatorias."""
+    item = ESQUEMA["properties"]["tickets"]["items"]
+    for objeto in (ESQUEMA, item):
+        assert objeto["additionalProperties"] is False
+        assert set(objeto["required"]) == set(objeto["properties"])
 
 
 def test_ticket_demo_es_coherente():
