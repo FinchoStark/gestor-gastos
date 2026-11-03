@@ -47,9 +47,19 @@ Si ya tienes una base de datos en Neon, no crees otra: añade su cadena de conex
 
 ## 5. AWS S3 para las fotos
 
+### Si es tu primera vez en AWS
+
+1. **Crea la cuenta** en https://aws.amazon.com. Si te ofrece dos formas de alta, elige la avanzada, con usuario *root*: en la otra no se puede activar la región de España.
+2. **Elige el plan.** La cuenta del plan gratuito se cierra sola a los 6 meses o al agotar los créditos, así que para guardar fotos de verdad usa el de pago, que también puede incluir créditos.
+3. **Protege el usuario root** con MFA: nombre de la cuenta (arriba a la derecha) → **Security credentials → Assign MFA device → Authenticator app**. Guarda una copia del código secreto. No uses el root para el día a día ni le crees claves de acceso.
+4. **Pon una alerta de gasto**: **Billing and Cost Management → Budgets**, con un presupuesto mensual pequeño y tu email. Avisa, pero no corta el servicio.
+5. **Activa la región de España**, que viene desactivada: nombre de la cuenta → **Account → AWS Regions → Europe (Spain) → Enable**. Es gratis; suele tardar unos minutos, pero puede tardar horas. Espera a que esté activa antes de seguir.
+
+### Bucket y permisos
+
 En la consola de AWS:
 
-1. **S3 → Create bucket**
+1. **S3 → Create bucket** (con la región **Europe (Spain)** seleccionada)
    - Nombre: por ejemplo `gestor-gastos-tickets-tunombre` (tiene que ser único en todo AWS)
    - Región: `eu-south-2` (España)
    - Deja marcado **Block all public access**: las fotos se ven con URLs firmadas temporales.

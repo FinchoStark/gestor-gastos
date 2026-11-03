@@ -24,9 +24,14 @@ def modo() -> str:
 
 def _s3():
     import boto3
+    from botocore.config import Config
     return boto3.client(
         "s3",
         region_name=config.S3_REGION,
+        # Host de la región, no el global: eu-south-2 se activa a mano y el host
+        # global (s3.amazonaws.com) puede no llegar a sus buckets.
+        endpoint_url=f"https://s3.{config.S3_REGION}.amazonaws.com",
+        config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
         # si están vacías, boto3 usa las credenciales del sistema (~/.aws, rol IAM...)
         aws_access_key_id=config.S3_ACCESS_KEY_ID or None,
         aws_secret_access_key=config.S3_SECRET_ACCESS_KEY or None,
