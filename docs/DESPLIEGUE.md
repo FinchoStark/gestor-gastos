@@ -1,7 +1,7 @@
 # Despliegue paso a paso
 
 Orden recomendado: **GitHub → Vercel → Neon (PostgreSQL) → clave de Claude → AWS S3**.
-Cada paso añade algo, y la app funciona desde el primero (en modo demo).
+La app funciona desde el paso 2 (en modo demo), pero sin las variables de acceso responde 503: es a propósito, para que nunca quede abierta en internet.
 
 ## 1. Subir el código a GitHub
 
@@ -17,9 +17,17 @@ git push -u origin main
 
 1. Entra en https://vercel.com con tu cuenta de GitHub.
 2. **Add New → Project** e importa `gestor-gastos`.
-3. Vercel detecta FastAPI solo (busca `app` en `app/main.py`). Pulsa **Deploy**.
+3. Vercel detecta FastAPI solo (busca `app` en `app/main.py`).
+4. Antes de pulsar **Deploy**, en **Environment Variables** añade el acceso a la app:
 
-En `vercel.json` se sube el tiempo máximo de la función a 60 s, porque leer varias fotos con la IA puede tardar.
+| Variable | Valor |
+|---|---|
+| `APP_USUARIO` | el usuario que quieras |
+| `APP_CONTRASENA` | una contraseña larga y aleatoria |
+
+5. Pulsa **Deploy**. El navegador pedirá ese usuario y contraseña al abrir la web.
+
+En `vercel.json` se sube el tiempo máximo de la función a 60 s, porque leer varias fotos con la IA puede tardar, y se fija la región en Frankfurt (`fra1`), cerca de la base de datos y dentro de Europa. Si tu base de datos está en otra región, cámbiala ahí.
 
 ## 3. PostgreSQL con Neon
 
@@ -28,6 +36,8 @@ En `vercel.json` se sube el tiempo máximo de la función a 60 s, porque leer va
 3. **Redeploy**. Las tablas se crean solas en el primer arranque.
 
 Para usar la misma base de datos en local, copia esa `DATABASE_URL` en tu `.env`.
+
+Si ya tienes una base de datos en Neon, no crees otra: añade su cadena de conexión como variable `DATABASE_URL` en **Settings → Environment Variables** y haz **Redeploy**.
 
 ## 4. Clave de la API de Claude
 
@@ -73,6 +83,6 @@ En la consola de AWS:
 
 ## Comprobación final
 
-- `https://TU-PROYECTO.vercel.app/api/salud` debe devolver `base_datos: true`, `ia: "claude"`, `almacenamiento: "s3"`.
+- `https://TU-PROYECTO.vercel.app/api/salud` debe pedir usuario y contraseña, y después devolver `base_datos: true`, `ia: "claude"`, `almacenamiento: "s3"`.
 - Abre la web desde el móvil, haz una foto a un ticket real y revisa el resultado.
 - Si algo falla: Vercel → proyecto → **Logs**.

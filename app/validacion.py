@@ -23,6 +23,16 @@ TOLERANCIA = Decimal("0.02")      # céntimos de diferencia admitidos por redond
 CONFIANZA_MINIMA = Decimal("0.70")  # por debajo, el ticket va a "revisar"
 DIAS_MAXIMOS_ANTIGUEDAD = 90
 
+# Valores que caben en las columnas de PostgreSQL y tienen sentido (mínimo, máximo)
+_MAX_IMPORTE = Decimal("99999999.99")  # NUMERIC(10,2)
+RANGOS = {
+    "base_imponible": (-_MAX_IMPORTE, _MAX_IMPORTE),
+    "cuota_iva": (-_MAX_IMPORTE, _MAX_IMPORTE),
+    "total": (Decimal("0"), _MAX_IMPORTE),
+    "tipo_iva": (Decimal("0"), Decimal("999.99")),  # NUMERIC(5,2)
+    "confianza": (Decimal("0"), Decimal("1")),
+}
+
 
 # ---------------------------------------------------------------------------
 # Utilidades
@@ -41,9 +51,29 @@ def a_decimal(valor) -> Decimal | None:
         else:
             texto = texto.replace(",", ".")
     try:
-        return Decimal(texto).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        numero = Decimal(texto).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except InvalidOperation:
         return None
+    return numero if numero.is_finite() else None
+
+
+def campos_fuera_de_rango(datos: dict) -> list[str]:
+    """Campos numéricos presentes en `datos` cuyo valor no entra en RANGOS."""
+    fuera = []
+    for campo, (minimo, maximo) in RANGOS.items():
+        numero = a_decimal(datos.get(campo))
+        if numero is not None and not minimo <= numero <= maximo:
+            fuera.append(campo)
+    return fuera
+
+
+def _anular_fuera_de_rango(t: dict, avisos: list[str]) -> bool:
+    """Deja en None los valores imposibles (no se guardan) y avisa. True si había alguno."""
+    fuera = campos_fuera_de_rango(t)
+    for campo in fuera:
+        avisos.append(f"Valor fuera de rango en {campo}: {t[campo]}.")
+        t[campo] = None
+    return bool(fuera)
 
 
 def a_fecha(valor) -> date | None:
@@ -142,6 +172,10 @@ def validar_ticket(
         "confianza": a_decimal(datos.get("confianza")),
     }
 
+    # --- Valores imposibles: la IA puede leer mal y no deben romper el guardado
+    if _anular_fuera_de_rango(t, avisos):
+        necesita_revision = True
+
     # --- Total y fecha son obligatorios -----------------------------------
     if t["total"] is None:
         avisos.append("No se ha podido leer el importe total.")
@@ -167,6 +201,9 @@ def validar_ticket(
     elif total is not None and base is not None and cuota is None:
         cuota = total - base
         t["cuota_iva"] = cuota
+        if _anular_fuera_de_rango(t, avisos):  # la cuota calculada también debe caber
+            necesita_revision = True
+            cuota = t["cuota_iva"]
 
     if total is not None and base is not None and cuota is not None:
         if abs(base + cuota - total) > TOLERANCIA:

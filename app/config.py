@@ -20,5 +20,9 @@ S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID", "")
 S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY", "")
 CARPETA_LOCAL = os.getenv("CARPETA_FOTOS", "uploads")
 
+# Acceso con contraseña compartida. En Vercel son obligatorias; en local, opcionales.
+APP_USUARIO = os.getenv("APP_USUARIO", "")
+APP_CONTRASENA = os.getenv("APP_CONTRASENA", "")
+
 EN_VERCEL = bool(os.getenv("VERCEL"))
 TAMANO_MAXIMO_FOTO = 4 * 1024 * 1024  # Vercel limita el cuerpo de la petición a 4,5 MB

@@ -176,7 +176,17 @@ def cambiar_estado(con, gasto_id: int, estado: str, motivo: str | None = None) -
 
 
 def borrar_gasto(con, gasto_id: int) -> bool:
-    return con.execute("DELETE FROM gastos WHERE id = %s RETURNING id", (gasto_id,)).fetchone() is not None
+    fila = con.execute("DELETE FROM gastos WHERE id = %s RETURNING foto_id", (gasto_id,)).fetchone()
+    if fila is None:
+        return False
+    # Si la foto se queda sin gastos se olvida su registro, para poder volver a subirla
+    con.execute(
+        """DELETE FROM fotos f
+           WHERE f.id = %s
+             AND NOT EXISTS (SELECT 1 FROM gastos g WHERE g.foto_id = f.id)""",
+        (fila["foto_id"],),
+    )
+    return True
 
 
 def resumen(con) -> dict:

@@ -18,13 +18,14 @@ from pathlib import Path
 from typing import Literal
 
 import psycopg
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import almacen, config, db, extractor
-from .validacion import validar_ticket
+from .auth import credenciales_validas
+from .validacion import campos_fuera_de_rango, validar_ticket
 
 log = logging.getLogger("gastos")
 
@@ -53,6 +54,24 @@ app = FastAPI(
 async def error_bd(_, exc):
     log.error("Error de conexión con PostgreSQL: %s", exc)
     return JSONResponse(status_code=503, content={"detail": "No hay conexión con la base de datos."})
+
+
+@app.middleware("http")
+async def exigir_contrasena(request: Request, call_next):
+    """Protege la web y la API. Si falta la configuración en Vercel, no abre la app."""
+    usuario, contrasena = config.APP_USUARIO, config.APP_CONTRASENA
+    if not usuario and not contrasena and not config.EN_VERCEL:
+        return await call_next(request)  # desarrollo en local sin contraseña
+    if not usuario or not contrasena:
+        log.error("Falta configurar APP_USUARIO y APP_CONTRASENA")
+        return JSONResponse(status_code=503, content={"detail": "Falta configurar el acceso a la aplicación."})
+    if not credenciales_validas(request.headers.get("authorization"), usuario, contrasena):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Hace falta usuario y contraseña."},
+            headers={"WWW-Authenticate": 'Basic realm="Gestor de gastos", charset="UTF-8"'},
+        )
+    return await call_next(request)
 
 
 # ------------------------------------------------------------------ modelos
@@ -204,6 +223,9 @@ def ver_gasto(gasto_id: int):
 @app.patch("/api/gastos/{gasto_id}")
 def editar_gasto(gasto_id: int, cambios: GastoEditado):
     """Corrección manual: se vuelven a pasar todas las validaciones."""
+    fuera = campos_fuera_de_rango(cambios.model_dump(exclude_unset=True))
+    if fuera:
+        raise HTTPException(422, f"Valor fuera de rango en: {', '.join(fuera)}.")
     with db.conexion() as con:
         actual = db.obtener_gasto(con, gasto_id)
         if not actual:

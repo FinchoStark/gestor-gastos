@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.extractor import _ticket_demo, parsear_respuesta
-from app.validacion import a_decimal, es_nif_valido, validar_ticket
+from app.validacion import a_decimal, campos_fuera_de_rango, es_nif_valido, validar_ticket
 
 HOY = date(2026, 11, 3)
 
@@ -127,3 +127,51 @@ def test_ticket_demo_es_coherente():
     for _ in range(30):
         t, avisos, _ = validar_ticket(_ticket_demo())
         assert not any("no cuadran" in a or "no es válido" in a for a in avisos), avisos
+
+
+# ------------------------------------------------- valores que no caben en la BD
+def test_total_que_no_cabe_se_anula_y_pasa_a_revisar():
+    t, avisos, estado = validar_ticket(ticket(total=99999999999), hoy=HOY)
+    assert t["total"] is None
+    assert estado == "revisar"
+    assert any("fuera de rango" in a for a in avisos)
+
+
+def test_mayor_importe_admitido_se_conserva():
+    t, avisos, _ = validar_ticket(ticket(total="99999999.99"), hoy=HOY)
+    assert t["total"] == Decimal("99999999.99")
+    assert not any("fuera de rango" in a for a in avisos)
+
+
+def test_cuota_calculada_que_no_cabe_se_anula():
+    t, avisos, estado = validar_ticket(
+        ticket(base_imponible="-99999999.00", cuota_iva=None, total="99999999.00"), hoy=HOY
+    )
+    assert t["cuota_iva"] is None
+    assert estado == "revisar"
+    assert any("fuera de rango" in a for a in avisos)
+
+
+def test_tipo_iva_negativo_o_enorme_se_anula():
+    for tipo in (-100, 1000):  # -100 además dividiría entre cero al calcular la base
+        t, avisos, estado = validar_ticket(ticket(tipo_iva=tipo, base_imponible=None, cuota_iva=None), hoy=HOY)
+        assert t["tipo_iva"] is None
+        assert estado == "revisar"
+        assert any("fuera de rango" in a for a in avisos)
+
+
+def test_confianza_como_porcentaje_se_anula():
+    t, avisos, estado = validar_ticket(ticket(confianza=95), hoy=HOY)
+    assert t["confianza"] is None
+    assert estado == "revisar"
+    assert any("fuera de rango" in a for a in avisos)
+
+
+def test_a_decimal_descarta_valores_no_finitos():
+    assert a_decimal("NaN") is None
+    assert a_decimal("Infinity") is None
+
+
+def test_campos_fuera_de_rango_lista_los_campos():
+    assert campos_fuera_de_rango({"total": "99999999999", "tipo_iva": 21, "cuota_iva": None}) == ["total"]
+    assert campos_fuera_de_rango({"total": "12.10"}) == []

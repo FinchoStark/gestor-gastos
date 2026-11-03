@@ -65,6 +65,8 @@ Ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 
 ## API
 
+Todas las rutas y la web piden usuario y contraseña (HTTP Basic) si están definidos `APP_USUARIO` y `APP_CONTRASENA`. En Vercel son obligatorios: sin ellos la app responde 503.
+
 | Método | Ruta | Qué hace |
 |---|---|---|
 | GET | `/api/salud` | Estado de BD, IA y almacenamiento |
@@ -84,6 +86,7 @@ Ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 ```
 app/
   main.py         rutas FastAPI y flujo de subida
+  auth.py         comprobación del usuario y la contraseña (HTTP Basic)
   extractor.py    llamada a Claude con visión (tool use = salida estructurada)
   validacion.py   reglas de negocio puras (sin BD ni web → fáciles de testear)
   db.py           consultas SQL con psycopg 3
@@ -106,7 +109,7 @@ scripts/          utilidades de línea de comandos
 
 ## Próximos pasos
 
-- Autenticación y roles (empleado / responsable / administración).
+- Usuarios y roles (empleado / responsable / administración): hoy hay una única contraseña compartida.
 - Procesado en segundo plano con una cola si se suben lotes grandes.
 - Integración con el programa de contabilidad.
 - Soporte de PDF y de tickets en otras monedas con conversión.
