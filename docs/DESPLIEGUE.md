@@ -53,7 +53,7 @@ Si ya tienes una base de datos en Neon, no crees otra: añade su cadena de conex
 2. **Elige el plan.** La cuenta del plan gratuito se cierra sola a los 6 meses o al agotar los créditos, así que para guardar fotos de verdad usa el de pago, que también puede incluir créditos.
 3. **Protege el usuario root** con MFA: nombre de la cuenta (arriba a la derecha) → **Security credentials → Assign MFA device → Authenticator app**. Guarda una copia del código secreto. No uses el root para el día a día ni le crees claves de acceso.
 4. **Pon una alerta de gasto**: **Billing and Cost Management → Budgets**, con un presupuesto mensual pequeño y tu email. Avisa, pero no corta el servicio.
-5. **Activa la región de España**, que viene desactivada: nombre de la cuenta → **Account → AWS Regions → Europe (Spain) → Enable**. Es gratis; suele tardar unos minutos, pero puede tardar horas. Espera a que esté activa antes de seguir.
+5. **Activa la región de España**, que viene desactivada: nombre de la cuenta → **Account → AWS Regions → Europe (Spain) → Enable**. Es gratis; suele tardar unos minutos, pero puede tardar horas. Espera a que esté activa antes de seguir. Con el plan gratuito puede no estar disponible: en ese caso usa otra región de la UE, como Estocolmo (`eu-north-1`) o Fráncfort (`eu-central-1`).
 
 ### Bucket y permisos
 
@@ -83,7 +83,7 @@ En la consola de AWS:
 | Variable | Valor |
 |---|---|
 | `S3_BUCKET` | nombre del bucket |
-| `S3_REGION` | `eu-south-2` |
+| `S3_REGION` | la región del bucket, por ejemplo `eu-south-2` (debe coincidir exactamente) |
 | `S3_ACCESS_KEY_ID` | la access key |
 | `S3_SECRET_ACCESS_KEY` | la secret key |
 

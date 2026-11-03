@@ -182,7 +182,11 @@ def _procesar_foto(archivo: UploadFile, empleado_id: int, limites: dict) -> dict
         return {"archivo": nombre, "error": "No se ha detectado ningún ticket en la foto."}
 
     # 3) Guardar la foto (S3 / local)
-    ruta = almacen.guardar(contenido, huella, tipo)
+    try:
+        ruta = almacen.guardar(contenido, huella, tipo)
+    except Exception:
+        log.exception("Fallo guardando la foto")  # el detalle queda en el log, no se muestra
+        return {"archivo": nombre, "error": "No se pudo guardar la foto. Inténtalo de nuevo más tarde."}
 
     # 4) Validar e insertar todo en UNA transacción
     with db.conexion() as con:
